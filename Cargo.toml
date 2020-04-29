@@ -12,3 +12,4 @@ hyper = "0.13"
 tokio = { version = "0.2", features = ["macros"] }
 getopts = "0.2"
 hdrhistogram = "7.0.0"
+lazy_static = "1.4.0"

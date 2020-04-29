@@ -490,6 +490,7 @@ dependencies = [
  "getopts",
  "hdrhistogram",
  "hyper",
+ "lazy_static",
  "prometheus",
  "tokio",
 ]

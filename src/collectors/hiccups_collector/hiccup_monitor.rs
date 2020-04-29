@@ -4,21 +4,30 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use hdrhistogram::Histogram;
+use prometheus::HistogramVec;
+use prometheus::core::Metric;
 
 pub struct HiccupMonitor {
     hiccup_nanos: u64,
-    histogram: Arc<Mutex<Histogram<u64>>>,
+    // histogram: Arc<Mutex<Histogram<u64>>>,
+    histogram: Arc<Mutex<HistogramVec>>,
     handle: Option<thread::JoinHandle<()>>,
-    running: sync::Arc<AtomicBool>
+    running: sync::Arc<AtomicBool>,
 }
 
 impl HiccupMonitor {
     pub fn new() -> HiccupMonitor {
         HiccupMonitor {
             hiccup_nanos: 100,
-            histogram: Arc::new(Mutex::new(Histogram::<u64>::new(2).unwrap())),
+            // histogram: Arc::new(Mutex::new(Histogram::<u64>::new(2).unwrap())),
+            histogram: Arc::new(Mutex::new(register_histogram_vec!(
+    "hiccups_duration_seconds",
+    "hiccups detected in the VM expressed in nanoseconds.",
+    &["handler"]
+)
+                .unwrap())),
             running: sync::Arc::new(AtomicBool::new(true)),
-            handle: None
+            handle: None,
         }
     }
 
@@ -26,12 +35,12 @@ impl HiccupMonitor {
         let shortest_observed_delta = std::u64::MAX;
         let resolution = self.hiccup_nanos.clone();
         let is_running = self.running.clone();
-        let histogram : Arc<Mutex<Histogram<u64>>> = self.histogram.clone();
+        let histogram: Arc<Mutex<HistogramVec>> = self.histogram.clone();
 
         self.handle = Some(thread::Builder::new().name("hiccup-monitor".into()).spawn(move || {
             while is_running.load(Ordering::SeqCst) {
                 let hiccup_time = hicc(resolution, shortest_observed_delta);
-                record(histogram.clone(),hiccup_time, resolution);
+                record(histogram.clone(), hiccup_time, resolution);
             }
         }).unwrap());
 
@@ -45,12 +54,14 @@ impl HiccupMonitor {
         }
 
         /// We'll need fill in missing measurements as delayed
-        fn record(histogram : Arc<Mutex<Histogram<u64>>>, value: u64, expected_interval_between_value_samples: u64) {
-            histogram.lock().unwrap().record(value).unwrap();
+        fn record(histogram: Arc<Mutex<HistogramVec>>, value: u64, expected_interval_between_value_samples: u64) {
+            // histogram.lock().unwrap().record(value).unwrap();
+            histogram.lock().unwrap().with_label_values(&["all"]).observe(value as f64);
             if expected_interval_between_value_samples > 0 {
                 let mut missing_value = value - expected_interval_between_value_samples;
                 while missing_value >= expected_interval_between_value_samples {
-                    histogram.lock().unwrap().record(missing_value).unwrap();
+                    // histogram.lock().unwrap().record(missing_value).unwrap();
+                    histogram.lock().unwrap().with_label_values(&["all"]).observe(missing_value as f64);
                     missing_value -= expected_interval_between_value_samples
                 }
             }
@@ -64,9 +75,30 @@ impl HiccupMonitor {
             .join().expect("Could not join spawned thread");
     }
 
-    /// testing
+    /// testing purpose
     pub fn print(&mut self) {
-        println!("# of samples: {}", self.histogram.lock().unwrap().len());
-        println!("99.9'th percentile: {}", self.histogram.lock().unwrap().value_at_quantile(0.999));
+        // println!("# of samples: {}", self.histogram.lock().unwrap().len());
+        println!("# of samples: {}", self.histogram.lock().unwrap().with_label_values(&["all"]).get_sample_count());
+        // println!("99.9'th percentile: {}", self.histogram.lock().unwrap().with_label_values(&["all"]).metric());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_working() {
+        let mut monitor = HiccupMonitor::new();
+
+        monitor.run();
+
+        thread::sleep(Duration::from_millis(5000));
+
+        println!("Print");
+        monitor.print();
+
+        println!("Stop");
+        monitor.stop()
     }
 }

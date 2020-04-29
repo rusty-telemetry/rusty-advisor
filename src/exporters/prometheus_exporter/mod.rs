@@ -56,7 +56,7 @@ pub struct PrometheusExporter;
 impl PrometheusExporter {
 
     #[tokio::main]
-    pub async fn startUp() {
+    pub async fn start_up() {
         let addr = ([127, 0, 0, 1], 9898).into();
         println!("Listening on http://{}", addr);
 

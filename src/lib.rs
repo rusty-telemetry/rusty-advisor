@@ -9,6 +9,7 @@ mod exporters;
 mod collectors;
 
 use exporters::prometheus_exporter::PrometheusExporter;
+use collectors::hiccups_collector::hiccup_monitor::HiccupMonitor;
 
 pub struct RustyAdvisor;
 
@@ -16,8 +17,10 @@ impl RustyAdvisor {
 
     pub fn run() {
         println!("RustyAdvisor is starting...");
+        let mut monitor = HiccupMonitor::new();
+        monitor.run();
 
-        PrometheusExporter::startUp();
+        PrometheusExporter::start_up();
         println!("RustyAdvisor is ending...");
     }
 }

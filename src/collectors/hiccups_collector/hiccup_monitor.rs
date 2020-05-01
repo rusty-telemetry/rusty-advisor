@@ -37,25 +37,24 @@ impl HiccupMonitor {
     pub fn run(&mut self) {
         info!("Hiccups Monitor running...");
 
-        let shortest_observed_delta = std::u64::MAX;
+        let mut shortest_observed_delta = std::u64::MAX;
         let resolution = self.hiccup_nanos.clone();
         let is_running = self.running.clone();
         let histogram: Arc<Mutex<HistogramVec>> = self.histogram.clone();
 
         self.handle = Some(thread::Builder::new().name("hiccup-monitor".into()).spawn(move || {
             while is_running.load(Ordering::SeqCst) {
-                let hiccup_time = hicc(resolution, shortest_observed_delta);
+                let hiccup_time = hicc(resolution, &mut shortest_observed_delta);
                 record(histogram.clone(), hiccup_time, resolution);
             }
         }).unwrap());
 
-        fn hicc(resolution: u64, mut shortest_observed_delta: u64) -> u64 {
+        fn hicc(resolution: u64, shortest_observed_delta: &mut u64) -> u64 {
             let start = Instant::now();
             thread::sleep(Duration::from_nanos(resolution));
             let delta = start.elapsed().as_nanos() as u64;
-            if delta < shortest_observed_delta { shortest_observed_delta = delta }
-            // delta - shortest_observed_delta
-            delta
+            if delta < *shortest_observed_delta { *shortest_observed_delta = delta }
+            delta - *shortest_observed_delta
         }
 
         /// We'll need fill in missing measurements as delayed
@@ -63,7 +62,7 @@ impl HiccupMonitor {
             // histogram.lock().unwrap().record(value).unwrap();
             histogram.lock().unwrap().with_label_values(&["all"]).observe(value as f64);
             if expected_interval_between_value_samples > 0 {
-                let mut missing_value = value - expected_interval_between_value_samples;
+                let mut missing_value = if let Some(v) = value.checked_sub(expected_interval_between_value_samples) { v } else { 0 };
                 while missing_value >= expected_interval_between_value_samples {
                     // histogram.lock().unwrap().record(missing_value).unwrap();
                     histogram.lock().unwrap().with_label_values(&["all"]).observe(missing_value as f64);
@@ -81,7 +80,7 @@ impl HiccupMonitor {
             .join().expect("Could not join spawned thread");
     }
 
-    /// testing purpose
+    /// testing
     pub fn print(&mut self) {
         // println!("# of samples: {}", self.histogram.lock().unwrap().len());
         println!("# of samples: {}", self.histogram.lock().unwrap().with_label_values(&["all"]).get_sample_count());

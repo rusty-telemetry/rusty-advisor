@@ -6,6 +6,8 @@ use hyper::{
 };
 
 use prometheus::{Counter, Encoder, Opts, Registry, TextEncoder, Gauge, HistogramVec};
+use crate::settings::Settings;
+use std::net::SocketAddr;
 
 
 lazy_static! {
@@ -56,16 +58,18 @@ pub struct PrometheusExporter;
 impl PrometheusExporter {
 
     #[tokio::main]
-    pub async fn start_up() {
-        let addr = ([127, 0, 0, 1], 9898).into();
-        println!("Listening on http://{}", addr);
+    pub async fn start_up(settings: Settings) {
+        let config = settings.prometheus_exporter;
+        let addr = format!("{}:{}", config.host, config.port).parse::<SocketAddr>().unwrap();
+        // let addr = ([config.host], config.port).into();
+        info!("Listening on http://{}", addr);
 
         let serve_future = Server::bind(&addr).serve(make_service_fn(|_| async {
             Ok::<_, hyper::Error>(service_fn(serve_req))
         }));
 
         if let Err(err) = serve_future.await {
-            eprintln!("server error: {}", err);
+            error!("server error: {}", err);
         }
     }
 }

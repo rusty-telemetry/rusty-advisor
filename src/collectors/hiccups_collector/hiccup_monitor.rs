@@ -4,8 +4,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use hdrhistogram::Histogram;
-use prometheus::HistogramVec;
+use pretty_env_logger::env_logger;
+use pretty_env_logger::env_logger::Env;
 use prometheus::core::Metric;
+use prometheus::HistogramVec;
+
+use crate::settings::HiccupsMonitorConfig;
 
 pub struct HiccupMonitor {
     hiccup_nanos: u64,
@@ -16,15 +20,14 @@ pub struct HiccupMonitor {
 }
 
 impl HiccupMonitor {
-    pub fn new() -> HiccupMonitor {
+    pub fn new(config: &HiccupsMonitorConfig) -> HiccupMonitor {
         HiccupMonitor {
-            hiccup_nanos: 100,
+            hiccup_nanos: config.resolution_nanos,
             // histogram: Arc::new(Mutex::new(Histogram::<u64>::new(2).unwrap())),
             histogram: Arc::new(Mutex::new(register_histogram_vec!(
-    "hiccups_duration_seconds",
-    "hiccups detected in the VM expressed in nanoseconds.",
-    &["handler"]
-)
+                "hiccups_duration_seconds",
+                "hiccups detected in the VM expressed in nanoseconds.",
+                &["handler"])
                 .unwrap())),
             running: sync::Arc::new(AtomicBool::new(true)),
             handle: None,
@@ -32,6 +35,8 @@ impl HiccupMonitor {
     }
 
     pub fn run(&mut self) {
+        info!("Hiccups Monitor running...");
+
         let shortest_observed_delta = std::u64::MAX;
         let resolution = self.hiccup_nanos.clone();
         let is_running = self.running.clone();
@@ -69,6 +74,7 @@ impl HiccupMonitor {
     }
 
     pub fn stop(&mut self) {
+        info!("Hiccups Monitor stopping...");
         self.running.store(false, Ordering::SeqCst);
         self.handle
             .take().expect("Called stop")
@@ -89,16 +95,15 @@ mod tests {
 
     #[test]
     fn test_is_working() {
-        let mut monitor = HiccupMonitor::new();
+        let config = HiccupsMonitorConfig { resolution_nanos: 1000 };
+        let mut monitor = HiccupMonitor::new(&config);
 
         monitor.run();
 
         thread::sleep(Duration::from_millis(5000));
 
-        println!("Print");
         monitor.print();
 
-        println!("Stop");
         monitor.stop()
     }
 }

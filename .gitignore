@@ -26,4 +26,4 @@ src_managed/
 .scala_dependencies
 .worksheet
 
-
+config/local.toml

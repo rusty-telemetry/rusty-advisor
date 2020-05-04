@@ -42,6 +42,15 @@ RUSTY_PROMETHEUS_EXPORTER.HOST=127.0.0.1
  cargo test -- --nocapture
 ```
 
+### Docker
+
+Do a fresh build and run it:
+
+```bash
+ docker build -t rusty-advisor . 
+ docker run --rm -it rusty-advisor 
+```
+
 [JSON]: https://github.com/serde-rs/json
 [TOML]: https://github.com/toml-lang/toml
 [YAML]: https://github.com/chyh1990/yaml-rust

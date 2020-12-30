@@ -5,11 +5,13 @@ authors = ["dpsoft <diegolparra@gmail.com>", "cspinetta <cebspinetta@gmail.com>"
 edition = "2018"
 
 [dependencies]
-prometheus = "0.8"
+thiserror = "1.0"
+fnv = "1.0.3"
 hyper = "0.13"
-tokio = { version = "0.2", features = ["macros"] }
+tokio = { version = "0.2", features = ["macros", "sync", "rt-threaded", "rt-core", "blocking"] }
 getopts = "0.2"
 hdrhistogram = "7.0.0"
+prometheus = "0.8"
 lazy_static = "1.4.0"
 config = "0.10.1"
 serde = "1.0.8"
@@ -17,6 +19,21 @@ serde_derive = "1.0.8"
 toml = "0.5"
 log = "0.4"
 pretty_env_logger = "0.4"
+dashmap = "3.11.2"
+crossbeam-channel = "0.4.2"
+crossbeam-utils = "0.7.2"
+futures = "0.3"
+#ahash = "0.3.5"
+#flurry = "0.3.0"
+#chashmap = "2.2.2"
+arc-swap = "0.4.6"
+strum = "0.18.0"
+strum_macros = "0.18.0"
+
+[dev-dependencies]
+maplit = "1.0.2"
+float-cmp = "0.8.0"
+tokio-test = "0.2.1"
 
 [[bin]]
 name = "rusty-advisor"

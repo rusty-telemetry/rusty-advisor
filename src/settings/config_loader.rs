@@ -1,8 +1,11 @@
 use std::env;
-use std::path::PathBuf;
 
 use config::{Config, Environment, File};
 use config::Source;
+
+use crate::collectors::hiccups_collector::hiccup_settings::HiccupsMonitorSettings;
+use crate::exporters::prometheus_exporter::prometheus_settings::PrometheusSettings;
+use crate::strum::AsStaticRef;
 
 pub fn load_config() -> Config {
     let mut config = Config::new();
@@ -33,8 +36,18 @@ pub fn load_config() -> Config {
 
 fn add_default_config(config: &mut Config) {
     config.set_default("debug", false).unwrap();
-    config.set_default("prometheus_exporter.host", "0.0.0.0").unwrap();
-    config.set_default("prometheus_exporter.port", 9095).unwrap();
-    config.set_default("prometheus_exporter.path", "/metrics").unwrap();
-    config.set_default("hiccups_monitor.resolution_nanos", 100).unwrap();
+    let prometheus_settings_default = PrometheusSettings::default();
+    let hiccups_monitor_default = HiccupsMonitorSettings::default();
+    config.set_default("prometheus_exporter.host", prometheus_settings_default.host).unwrap();
+    config.set_default("prometheus_exporter.port", prometheus_settings_default.port as i64).unwrap();
+    config.set_default("prometheus_exporter.path", prometheus_settings_default.path).unwrap();
+    config.set_default("prometheus_exporter.metrics.histograms.buckets.default", prometheus_settings_default.metrics.histograms.buckets.default).unwrap();
+    config.set_default("prometheus_exporter.metrics.histograms.buckets.custom_buckets", prometheus_settings_default.metrics.histograms.buckets.custom_buckets).unwrap();
+    config.set_default("hiccups_monitor.name", hiccups_monitor_default.name).unwrap();
+    config.set_default("hiccups_monitor.description", hiccups_monitor_default.description).unwrap();
+    config.set_default("hiccups_monitor.resolution_nanos", hiccups_monitor_default.resolution_nanos as i64).unwrap();
+    config.set_default("hiccups_monitor.histogram_settings.min", hiccups_monitor_default.histogram_settings.min as i64).unwrap();
+    config.set_default("hiccups_monitor.histogram_settings.max", hiccups_monitor_default.histogram_settings.max as i64).unwrap();
+    config.set_default("hiccups_monitor.histogram_settings.precision", hiccups_monitor_default.histogram_settings.precision as i64).unwrap();
+    config.set_default("hiccups_monitor.histogram_settings.unit", hiccups_monitor_default.histogram_settings.unit.as_static()).unwrap();
 }

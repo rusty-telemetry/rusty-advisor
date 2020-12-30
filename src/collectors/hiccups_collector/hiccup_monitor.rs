@@ -3,32 +3,27 @@ use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use hdrhistogram::Histogram;
-use pretty_env_logger::env_logger;
-use pretty_env_logger::env_logger::Env;
-use prometheus::core::Metric;
-use prometheus::HistogramVec;
-
-use crate::settings::HiccupsMonitorConfig;
+use crate::collectors::hiccups_collector::hiccup_settings::HiccupsMonitorSettings;
+use crate::metrics::histogram::{HistogramBuilder, HistogramRecorder, HistogramSettings};
 
 pub struct HiccupMonitor {
     hiccup_nanos: u64,
-    // histogram: Arc<Mutex<Histogram<u64>>>,
-    histogram: Arc<Mutex<HistogramVec>>,
+    histogram: Arc<Mutex<HistogramRecorder>>,
     handle: Option<thread::JoinHandle<()>>,
     running: sync::Arc<AtomicBool>,
 }
 
 impl HiccupMonitor {
-    pub fn new(config: &HiccupsMonitorConfig) -> HiccupMonitor {
+    pub fn new(config: &HiccupsMonitorSettings) -> HiccupMonitor {
+        info!("Starting Hiccups-Monitor [resolution = {} nanos]", config.resolution_nanos);
+        let histogram_publisher = HistogramBuilder::new(config.name.clone(), config.description.clone())
+            .with_tags("component".to_string(), "rusty_advisor".to_string())
+            .with_settings(HistogramSettings::from(config.histogram_settings.min, config.histogram_settings.max, config.histogram_settings.precision, config.histogram_settings.unit.to_measurement_units()))
+            .build_sync()
+            .unwrap();
         HiccupMonitor {
             hiccup_nanos: config.resolution_nanos,
-            // histogram: Arc::new(Mutex::new(Histogram::<u64>::new(2).unwrap())),
-            histogram: Arc::new(Mutex::new(register_histogram_vec!(
-                "hiccups_duration_seconds",
-                "hiccups detected in the VM expressed in nanoseconds.",
-                &["handler"])
-                .unwrap())),
+            histogram: Arc::new(Mutex::new(histogram_publisher)),
             running: sync::Arc::new(AtomicBool::new(true)),
             handle: None,
         }
@@ -40,7 +35,7 @@ impl HiccupMonitor {
         let mut shortest_observed_delta = std::u64::MAX;
         let resolution = self.hiccup_nanos.clone();
         let is_running = self.running.clone();
-        let histogram: Arc<Mutex<HistogramVec>> = self.histogram.clone();
+        let histogram: Arc<Mutex<HistogramRecorder>> = self.histogram.clone();
 
         self.handle = Some(thread::Builder::new().name("hiccup-monitor".into()).spawn(move || {
             while is_running.load(Ordering::SeqCst) {
@@ -58,14 +53,12 @@ impl HiccupMonitor {
         }
 
         /// We'll need fill in missing measurements as delayed
-        fn record(histogram: Arc<Mutex<HistogramVec>>, value: u64, expected_interval_between_value_samples: u64) {
-            // histogram.lock().unwrap().record(value).unwrap();
-            histogram.lock().unwrap().with_label_values(&["all"]).observe(value as f64);
+        fn record(histogram: Arc<Mutex<HistogramRecorder>>, value: u64, expected_interval_between_value_samples: u64) {
+            histogram.lock().unwrap().record(value);
             if expected_interval_between_value_samples > 0 {
                 let mut missing_value = if let Some(v) = value.checked_sub(expected_interval_between_value_samples) { v } else { 0 };
                 while missing_value >= expected_interval_between_value_samples {
-                    // histogram.lock().unwrap().record(missing_value).unwrap();
-                    histogram.lock().unwrap().with_label_values(&["all"]).observe(missing_value as f64);
+                    histogram.lock().unwrap().record(missing_value);
                     missing_value -= expected_interval_between_value_samples
                 }
             }
@@ -79,29 +72,27 @@ impl HiccupMonitor {
             .take().expect("Called stop")
             .join().expect("Could not join spawned thread");
     }
-
-    /// testing
-    pub fn print(&mut self) {
-        // println!("# of samples: {}", self.histogram.lock().unwrap().len());
-        println!("# of samples: {}", self.histogram.lock().unwrap().with_label_values(&["all"]).get_sample_count());
-        // println!("99.9'th percentile: {}", self.histogram.lock().unwrap().with_label_values(&["all"]).metric());
-    }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::collectors::hiccups_collector::hiccup_settings::{HiccupsHistogramSettings, HiccupsMonitorSettings};
+
     use super::*;
 
     #[test]
     fn test_is_working() {
-        let config = HiccupsMonitorConfig { resolution_nanos: 1000 };
+        let config = HiccupsMonitorSettings {
+            name: "some_name".to_string(),
+            description: "some description".to_string(),
+            resolution_nanos: 1000,
+            histogram_settings: HiccupsHistogramSettings::default(),
+        };
         let mut monitor = HiccupMonitor::new(&config);
 
         monitor.run();
 
-        thread::sleep(Duration::from_millis(5000));
-
-        monitor.print();
+        thread::sleep(Duration::from_millis(500));
 
         monitor.stop()
     }
